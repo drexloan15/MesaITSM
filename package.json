@@ -1,0 +1,15 @@
+{
+  "name": "comutel-services",
+  "version": "1.0.0",
+  "description": "ITSM Enterprise Platform",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces"
+  }
+}
