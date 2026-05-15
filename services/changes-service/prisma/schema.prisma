@@ -1,0 +1,276 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  username         String    @unique
+  fullName         String
+  passwordHash     String?
+  phone            String?
+  isActive         Boolean   @default(true)
+  twoFactorEnabled Boolean   @default(false)
+  lastLogin        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  userRoles              UserRole[]
+  teamMemberships        TeamMember[]
+  incidentsCreated       Incident[]     @relation("IncidentRequester")
+  incidentsAssigned      Incident[]     @relation("IncidentAssignee")
+  comments               Comment[]
+  problemsAsInvestigator Problem[]      @relation("ProblemInvestigator")
+  problemsAsManager      Problem[]      @relation("ProblemManager")
+  changesAsRequester     ChangeRequest[] @relation("ChangeRequester")
+  changesAsManager       ChangeRequest[] @relation("ChangeManager")
+  deliveriesDeployed     Delivery[]      @relation("DeliveryDeployedBy")
+
+  @@map("users")
+}
+
+model Role {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  description  String?
+  isSystemRole Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  resource    String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Team {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  managerId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members           TeamMember[]
+  incidentsAssigned Incident[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  teamId     String
+  userId     String
+  roleInTeam String?
+  team       Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+  @@map("team_members")
+}
+
+model Category {
+  id           String   @id @default(uuid())
+  name         String
+  type         String
+  parentId     String?
+  description  String?
+  iconName     String?
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  parent    Category?     @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[]    @relation("CategoryTree")
+  incidents Incident[]
+  problems  Problem[]
+  changes   ChangeRequest[]
+
+  @@map("categories")
+}
+
+model Sla {
+  id                  String   @id @default(uuid())
+  name                String
+  description         String?
+  responseTimeHours   Int
+  resolutionTimeHours Int
+  escalationTimeHours Int?
+  priorityLevel       String?
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  incidents Incident[]
+
+  @@map("slas")
+}
+
+model Incident {
+  id                      String    @id @default(uuid())
+  ticketNumber            String    @unique
+  title                   String
+  description             String
+  categoryId              String
+  priority                String
+  status                  String    @default("aceptada")
+  severity                String?
+  impact                  String?
+  slaId                   String?
+  requesterId             String
+  assignedToUserId        String?
+  assignedToTeamId        String?
+  resolutionDescription   String?
+  resolvedAt              DateTime?
+  closedAt                DateTime?
+  dueDate                 DateTime
+  estimatedCompletionDate DateTime?
+  slaBreachAt             DateTime?
+  isSlaBreached           Boolean   @default(false)
+  parentIncidentId        String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+
+  category       Category  @relation(fields: [categoryId], references: [id])
+  sla            Sla?      @relation(fields: [slaId], references: [id])
+  requester      User      @relation("IncidentRequester", fields: [requesterId], references: [id])
+  assignedToUser User?     @relation("IncidentAssignee", fields: [assignedToUserId], references: [id])
+  assignedToTeam Team?     @relation(fields: [assignedToTeamId], references: [id])
+  parent         Incident? @relation("IncidentTree", fields: [parentIncidentId], references: [id])
+  children       Incident[] @relation("IncidentTree")
+
+  @@map("incidents")
+}
+
+model Comment {
+  id           String    @id @default(uuid())
+  content      String
+  isInternal   Boolean   @default(false)
+  resourceType String    @default("incident")
+  resourceId   String
+  userId       String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("comments")
+}
+
+model Problem {
+  id                  String    @id @default(uuid())
+  ticketNumber        String    @unique
+  title               String
+  description         String
+  categoryId          String
+  priority            String
+  status              String    @default("investigacion")
+  rootCause           String?
+  investigationNotes  String?
+  solutionDescription String?
+  workaround          String?
+  relatedIncidents    Int       @default(0)
+  investigatorId      String
+  managerId           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  category     Category @relation(fields: [categoryId], references: [id])
+  investigator User     @relation("ProblemInvestigator", fields: [investigatorId], references: [id])
+  manager      User?    @relation("ProblemManager", fields: [managerId], references: [id])
+
+  @@map("problems")
+}
+
+// ===== CHANGES SERVICE MODELS =====
+
+model ChangeRequest {
+  id                         String    @id @default(uuid())
+  ticketNumber               String    @unique
+  title                      String
+  description                String
+  categoryId                 String
+  priority                   String
+  status                     String    @default("proposed")
+  changeType                 String    @default("normal")
+  implementationPlan         String
+  rollbackPlan               String?
+  impactAssessment           String?
+  requesterId                String
+  managerId                  String?
+  implementationDate         DateTime?
+  scheduledMaintenanceWindow DateTime?
+  maintenanceDurationMinutes Int?
+  isEmergency                Boolean   @default(false)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+  deletedAt                  DateTime?
+
+  category   Category  @relation(fields: [categoryId], references: [id])
+  requester  User      @relation("ChangeRequester", fields: [requesterId], references: [id])
+  manager    User?     @relation("ChangeManager", fields: [managerId], references: [id])
+  deliveries Delivery[]
+
+  @@map("change_requests")
+}
+
+model Delivery {
+  id              String    @id @default(uuid())
+  changeRequestId String
+  title           String
+  description     String?
+  status          String    @default("scheduled")
+  scheduledDate   DateTime?
+  completedDate   DateTime?
+  deployedById    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  changeRequest ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  deployedBy    User?         @relation("DeliveryDeployedBy", fields: [deployedById], references: [id])
+
+  @@map("deliveries")
+}
